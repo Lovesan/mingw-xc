@@ -1,0 +1,11 @@
+prefix=/mingw
+exec_prefix=${prefix}
+includedir=${prefix}/include
+libdir=${exec_prefix}/lib
+
+Name: libintl
+Description: GNU gettext libintl
+URL: https://www.gnu.org/software/gettext/
+Version: 0.21
+Cflags: -I${includedir}
+Libs: -L${libdir} -lintl

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+SCRIPT_ROOT=$(realpath "$(dirname "${BASH_SOURCE[0]}")/../")
+MINGW_BUILD_ROOT=$(realpath "${MINGW_BUILD_ROOT:-$HOME/mingw-build}")
+SOURCE_ROOT="${MINGW_BUILD_ROOT%/}/src"
+HOST_BUILD_ROOT="${MINGW_BUILD_ROOT%/}/build-host"
+XC_BUILD_ROOT="${MINGW_BUILD_ROOT%/}/build-xc"
+TARGET_BUILD_ROOT="${MINGW_BUILD_ROOT%/}/build-target"
+MINGW_ROOT="${MINGW_ROOT:-/mingw}"
+XC_ROOT=${XC_ROOT:-/opt/xmingw}
+CFLAGS='-O2'
+CXXFLAGS='-O2'
+CPPFLAGS=''
+LDFLAGS=''
+

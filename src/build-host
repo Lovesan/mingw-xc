@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# shellcheck source=./env-host
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-host"
+
+# shellcheck source=../versions
+source "$SCRIPT_ROOT/versions"
+
+# shellcheck source=./utils
+source "$SCRIPT_ROOT/src/utils"
+
+# shellcheck source=./build-host-common
+source "$SCRIPT_ROOT/src/build-host-common"
+
+build_host_binutils() {
+    mkdir_cd_build binutils && \
+    do_configure "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}" \
+                 --disable-nls \
+                 --enable-lto \
+                 --with-gmp="$PREFIX" \
+                 --with-mpfr="$PREFIX" \
+                 --with-mpc="$PREFIX" \
+                 --with-zstd="$PREFIX" \
+                 --with-isl="$PREFIX" && \
+    do_make_install_strip
+}
+
+build_host_gcc() {
+    fixup_host_path && \
+    mkdir_cd_build gcc && \
+    "$SOURCE_ROOT/gcc-${GCC_VERSION}/configure" \
+                --prefix="$PREFIX" \
+                --build="$BUILD" \
+                --host="$HOST" \
+                --target="$TARGET" \
+                --disable-rpath \
+                --enable-silent-rules \
+                --disable-nls \
+                --enable-lto \
+                --enable-languages=c,c++ \
+                --enable-version-specific-runtime-libs \
+                --disable-multilib \
+                --enable-static \
+                --enable-shared \
+                --enable-libgomp \
+                --enable-libssp \
+                --disable-bootstrap \
+                --with-gmp="$PREFIX" \
+                --with-mpfr="$PREFIX" \
+                --with-mpc="$PREFIX" \
+                --with-isl="$PREFIX" \
+                --with-zstd="$PREFIX" \
+                CFLAGS="$CFLAGS" \
+                CXXFLAGS="$CXXFLAGS" \
+                CPPFLAGS="$CPPFLAGS" \
+                LDFLAGS="$LDFLAGS -lzstd -lpthread" && \
+    do_make_install_strip
+}

@@ -1,0 +1,167 @@
+#!/bin/bash
+# Reset
+Color_Off='\033[0m'       # Text Reset
+
+# Regular Colors
+Color_Black='\033[0;30m'        # Black
+Color_Red='\033[0;31m'          # Red
+Color_Green='\033[0;32m'        # Green
+Color_Yellow='\033[0;33m'       # Yellow
+Color_Blue='\033[0;34m'         # Blue
+Color_Purple='\033[0;35m'       # Purple
+Color_Cyan='\033[0;36m'         # Cyan
+Color_White='\033[0;37m'        # White
+
+NPROC=$(nproc)
+NJOBS=$((NPROC + 2))
+
+echo_error() {
+    echo -ne "${Color_Red}Error: " 1>&2
+    echo "$@" 1>&2
+    echo -ne "${Color_Off}" 1>&2
+}
+
+pathappend() {
+  for ARG in "$@"
+  do
+    if [ -d "$ARG" ] && [[ ":$PATH:" != *":$ARG:"* ]]; then
+        PATH="${PATH:+"$PATH:"}$ARG"
+    fi
+  done
+}
+
+pathprepend() {
+  for ((i=$#; i>0; i--)); 
+  do
+    ARG=${!i}
+    if [ -d "$ARG" ] && [[ ":$PATH:" != *":$ARG:"* ]]; then
+        PATH="$ARG${PATH:+":$PATH"}"
+    fi
+  done
+}
+
+pathremove() {
+    for ARG in "$@"; do
+        PATH=:$PATH:
+        PATH=${PATH//:$ARG:/:}
+        PATH=${PATH#:}; PATH=${PATH%:}
+    done
+}
+
+fixup_host_path() {
+    pathremove "$BINDIR"
+    pathprepend "$BINDIR"
+    export PATH
+}
+
+mkdir_cd() {
+    if [[ $# -ne 1 ]]; then
+        echo_error "Usage: mkdir_cd <dir>"
+        return 1
+    fi
+    echo -e "${Color_Blue}Switching to $1${Color_Off}"
+    mkdir -p "$1" && cd "$1" || return 1
+}
+
+mkdir_cd_clean() {
+    mkdir_cd "$1" && rm -rf ./*
+}
+
+mkdir_cd_build() {    
+    if [[ $# -lt 1 ]]; then
+        echo_error "Usage: mkdir_cd_build <dir>"
+        return 1
+    fi
+    mkdir_cd_clean "$BUILD_ROOT/$1"
+}
+
+do_make_install() {
+    make -j$NJOBS && make install
+}
+
+do_make_install_strip() {
+    make -j$NJOBS && make install-strip
+}
+
+do_make_uninstall() {
+    make uninstall
+}
+
+do_ninja_make_install() {
+    ninja && ninja install
+}
+
+do_cmake_install_strip() {
+    make -j$NJOBS && make install/strip
+}
+
+do_cmake_uninstall() {
+    xargs rm < install_manifest.txt
+}
+
+do_configure() {
+    if [[ $# -lt 1 ]]; then
+        echo_error "Usage: do_configure <dir> <...args...>"
+        return 1
+    fi
+    local srcdir=${1%/}
+    shift
+    echo -e "${Color_Green}Configuring $(basename "$srcdir")${Color_Off}"
+    "${srcdir}/configure" --prefix="$PREFIX" \
+                          --build="$BUILD" \
+                          --host="$HOST" \
+                          --target="$TARGET" \
+                          --with-sysroot="$SYSROOT" \
+                          --disable-rpath \
+                          CFLAGS="$CFLAGS" \
+                          CXXFLAGS="$CXXFLAGS" \
+                          CPPFLAGS="$CPPFLAGS" \
+                          LDFLAGS="$LDFLAGS" \
+                          "$@"
+}
+
+do_configure_static() {
+    do_configure "$@" --enable-static --disable-shared
+}
+
+do_configure_shared() {
+    do_configure "$@" --enable-shared --disable-static
+}
+
+download_untar() {
+    local filename
+    if [[ $# -ne 1 ]]; then
+        echo_error "Usage: download_untar <url>"
+        return 1
+    fi
+    mkdir_cd "$SOURCE_ROOT" && \
+    filename=$(basename "$1") && \
+    wget "$1" && \
+    tar xavf "$filename"
+}
+
+download_untar_silent() {
+    local filename    
+    if [[ $# -ne 1 ]]; then
+        echo_error "Usage: download_untar_silent <url>"
+        return 1
+    fi
+    mkdir_cd "$SOURCE_ROOT" && \
+    filename=$(basename "$1") && \
+    wget "$1" && \
+    tar xaf "$filename"
+}
+
+download_unzip() {    
+    local filename
+    local dirname
+    if [[ $# -ne 1 ]]; then
+        echo_error "Usage: download_unzip <url>"
+        return 1
+    fi
+    mkdir_cd "$SOURCE_ROOT" && \
+    filename="$(basename "$1")" && \
+    dirname="${filename%.*}" && \
+    wget "$1" && \
+    unzip -o "$filename" -d "$dirname"
+}

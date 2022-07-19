@@ -1,0 +1,56 @@
+# -*- Mode: makefile-gmake; indent-tabs-mode: t -*-
+
+SHELL= /bin/bash
+TOOL_PREFIX?=
+CC= $(TOOL_PREFIX)gcc
+DLLTOOL= $(TOOL_PREFIX)dlltool
+AR= $(TOOL_PREFIX)ar
+RANLIB= $(TOOL_PREFIX)ranlib
+STRIP= $(TOOL_PREFIX)strip
+
+CFLAGS?= -O2 -W -Wall -ansi -pedantic
+CFLAGS+= -DWIN32 -D_FILE_OFFSET_BITS=64
+
+PREFIX= /mingw
+
+export CC CFLAGS DLLTOOL AR RANLIB STRIP
+
+all: libjbig-2.dll libjbig85-2.dll libjbig.dll.a libjbig85.dll.a lib pbm
+
+libjbig.dll.a: libjbig-2.dll
+	$(DLLTOOL) -l libjbig.dll.a -d libjbig.def -D libjbig-2.dll
+
+libjbig85.dll.a: libjbig85-2.dll
+	$(DLLTOOL) -l libjbig85.dll.a -d libjbig85.def -D libjbig85-2.dll
+
+libjbig-2.dll: lib
+	$(CC) $(CFLAGS) -shared -o libjbig-2.dll libjbig.def libjbig/jbig.o libjbig/jbig_ar.o
+
+libjbig85-2.dll: lib
+	$(CC) $(CFLAGS) -shared -o libjbig85-2.dll libjbig85.def libjbig/jbig85.o libjbig/jbig_ar.o
+
+lib:
+	cd libjbig && $(MAKE) -e
+
+pbm: lib
+	cd pbmtools && $(MAKE) -e
+
+clean:
+	rm -f libjbig-2.dll libjbig85-2.dll libjbig.dll.a libjbig85.dll.a \
+		pbmtools/jbgtopbm.exe pbmtools/jbgtopbm85.exe \
+		pbmtools/pbmtojbg.exe pbmtools/pbmtojbg85.exe
+	cd libjbig  && $(MAKE) clean
+	cd pbmtools && $(MAKE) clean
+
+install:
+	install -d "$(PREFIX)/bin" && \
+    install -d "$(PREFIX)/lib" && \
+    install -d "$(PREFIX)/include" && \
+    "$(STRIP)" --strip-unneeded libjbig-2.dll libjbig85-2.dll \
+        pbmtools/jbgtopbm.exe pbmtools/jbgtopbm85.exe \
+        pbmtools/pbmtojbg.exe pbmtools/pbmtojbg85.exe && \
+    install -m 755 libjbig-2.dll libjbig85-2.dll "$(PREFIX)/bin" && \
+    install -m 644 libjbig.dll.a libjbig85.dll.a "$(PREFIX)/lib" && \
+    install -m 755 pbmtools/jbgtopbm.exe pbmtools/jbgtopbm85.exe \
+                   pbmtools/pbmtojbg.exe pbmtools/pbmtojbg85.exe "$(PREFIX)/bin" && \
+    install -m 644 libjbig/jbig.h libjbig/jbig85.h libjbig/jbig_ar.h "$(PREFIX)/include"

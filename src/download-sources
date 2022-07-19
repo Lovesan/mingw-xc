@@ -1,0 +1,164 @@
+#!/bin/bash
+
+# shellcheck source=./env-common
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-shared"
+
+# shellcheck source=../versions
+source "$SCRIPT_ROOT/versions"
+
+# shellcheck source=./utils
+source "$SCRIPT_ROOT/src/utils"
+
+cd "$SOURCE_ROOT" || exit 1
+
+download_untar ftp://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.xz && \
+download_untar ftp://ftp.gnu.org/gnu/mpfr/mpfr-${MPFR_VERSION}.tar.xz && \
+download_untar ftp://ftp.gnu.org/gnu/mpc/mpc-${MPC_VERSION}.tar.gz && \
+download_untar ftp://gcc.gnu.org/pub/gcc/infrastructure/isl-${ISL_VERSION}.tar.bz2 && \
+download_untar ftp://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VERSION}.tar.xz && \
+download_untar ftp://ftp.gnu.org/gnu/gcc/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz && \
+download_untar https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz && \
+wget https://downloads.sourceforge.net/project/mingw-w64/mingw-w64/mingw-w64-release/mingw-w64-v${MINGW_VERSION}.zip && \
+unzip -o mingw-w64-v${MINGW_VERSION}.zip && \
+download_untar https://github.com/libffi/libffi/releases/download/v${LIBFFI_VERSION}/libffi-${LIBFFI_VERSION}.tar.gz && \
+download_untar https://github.com/facebook/zstd/archive/refs/tags/v${ZSTD_VERSION}.tar.gz -O zstd-${ZSTD_VERSION}.tar.gz && \
+download_untar https://download.gnome.org/sources/glib/${GLIB_VERSION_DIR}/glib-${GLIB_VERSION}.tar.xz && \
+download_untar https://ftp.gnu.org/pub/gnu/libiconv/libiconv-${LIBICONV_VERSION}.tar.gz && \
+download_untar https://pkgconfig.freedesktop.org/releases/pkg-config-${PKG_CONFIG_VERSION}.tar.gz && \
+download_untar https://ftp.gnu.org/gnu/gettext/gettext-${GETTEXT_VERSION}.tar.xz && \
+download_untar https://ftp.gnu.org/gnu/libunistring/libunistring-${LIBUNISTRING_VERSION}.tar.xz && \
+download_untar https://tukaani.org/xz/xz-${XZ_VERSION}.tar.xz && \
+download_untar https://github.com/unicode-org/icu/releases/download/release-${ICU_VERSION//[.]/-}/icu4c-${ICU_VERSION//[.]/_}-src.tgz && \
+download_untar https://gitlab.gnome.org/GNOME/libxml2/-/archive/v${LIBXML2_VERSION}/libxml2-v${LIBXML2_VERSION}.tar.bz2 && \
+mv icu icu-${ICU_VERSION} && \
+download_untar https://sourceware.org/pub/bzip2/bzip2-${BZIP2_VERSION}.tar.gz && \
+download_untar https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VERSION}/pcre2-${PCRE2_VERSION}.tar.bz2 && \
+download_untar https://ftp.gnu.org/gnu/gzip/gzip-${GZIP_VERSION}.tar.xz && \
+download_untar https://downloads.sourceforge.net/project/libpng/libpng16/${LIBPNG_VERSION}/libpng-${LIBPNG_VERSION}.tar.xz && \
+download_untar https://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz && \
+download_untar https://downloads.sourceforge.net/libjpeg-turbo/libjpeg-turbo-${LIBJPEG_TURBO_VERSION}.tar.gz && \
+download_untar https://download.osgeo.org/libtiff/tiff-${TIFF_VERSION}.tar.xz && \
+download_untar https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-${JBIG_VERSION}.tar.gz && \
+download_untar http://downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz && \
+download_untar https://downloads.sourceforge.net/project/giflib/giflib-${GIFLIB_VERSION}.tar.gz && \
+download_untar https://downloads.sourceforge.net/freeglut/freeglut-${FREEGLUT_VERSION}.tar.gz && \
+download_untar https://downloads.sourceforge.net/lcms/lcms2-${LCMS2_VERSION}.tar.gz && \
+download_untar https://github.com/uclouvain/openjpeg/archive/v${OPENJPEG_VERSION}/openjpeg-${OPENJPEG_VERSION}.tar.gz && \
+download_untar https://github.com/jasper-software/jasper/archive/version-${JASPER_VERSION}/jasper-${JASPER_VERSION}.tar.gz && \
+download_untar https://gitlab.gnome.org/GNOME/libxslt/-/archive/v${LIBXSLT_VERSION}/libxslt-v${LIBXSLT_VERSION}.tar.bz2 && \
+download_unzip https://docbook.org/xml/4.5/docbook-xml-4.5.zip && \
+download_untar https://github.com/docbook/xslt10-stylesheets/releases/download/release/${DOCBOOK_XSL_VERSION}/docbook-xsl-nons-${DOCBOOK_XSL_VERSION}.tar.bz2 && \
+download_untar https://sourceware.org/ftp/docbook-tools/new-trials/SOURCES/sgml-common-${SGML_COMMON_VERSION}.tgz && \
+download_untar https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-${LIBGPG_ERROR_VERSION}.tar.bz2 && \
+download_untar https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERSION}.tar.bz2 && \
+download_untar https://www.libraw.org/data/LibRaw-${LIBRAW_VERSION}.tar.gz && \
+download_untar http://files.itstool.org/itstool/itstool-${ITSTOOL_VERSION}.tar.bz2 && \
+download_untar https://gitlab.freedesktop.org/xdg/shared-mime-info/-/archive/${SHARED_MIME_INFO_VERSION}/shared-mime-info-${SHARED_MIME_INFO_VERSION}.tar.bz2 && \
+download_untar https://download.gnome.org/sources/gobject-introspection/${GOBJECT_INTROSPECTION_VERSION%.*}/gobject-introspection-${GOBJECT_INTROSPECTION_VERSION}.tar.xz && \
+download_untar https://releases.pagure.org/xmlto/xmlto-${XMLTO_VERSION}.tar.bz2 && \
+download_untar https://download.gnome.org/sources/gdk-pixbuf/${GDK_PIXBUF_VERSION%.*}/gdk-pixbuf-${GDK_PIXBUF_VERSION}.tar.xz && \
+download_untar https://www.cairographics.org/releases/pixman-${PIXMAN_VERSION}.tar.gz && \
+download_untar http://liblqr.wdfiles.com/local--files/en:download-page/liblqr-1-${LIBLQR_VERSION}.tar.bz2 && \
+download_untar https://github.com/google/brotli/archive/v${BROTLI_VERSION}/brotli-${BROTLI_VERSION}.tar.gz && \
+download_untar https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz && \
+download_untar https://downloads.sourceforge.net/freetype/freetype-${FREETYPE_VERSION}.tar.xz && \
+download_untar https://github.com/silnrsi/graphite/releases/download/${GRAPHITE2_VERSION}/graphite2-${GRAPHITE2_VERSION}.tgz && \
+download_untar https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz && \
+download_untar https://s3.amazonaws.com/json-c_releases/releases/json-c-${JSON_C_VERSION}.tar.gz && \
+download_untar https://github.com/libexpat/libexpat/releases/download/R_${EXPAT_VERSION//./_}/expat-${EXPAT_VERSION}.tar.bz2 && \
+download_untar http://ftp.gnu.org/pub/gnu/gperf/gperf-${GPERF_VERSION}.tar.gz && \
+download_untar https://www.freedesktop.org/software/fontconfig/release/fontconfig-${FONTCONFIG_VERSION}.tar.xz && \
+download_untar https://www.oberhumer.com/opensource/lzo/download/lzo-${LZO_VERSION}.tar.gz && \
+download_untar https://www.cairographics.org/snapshots/cairo-${CAIRO_VERSION}.tar.xz && \
+download_untar https://www.sqlite.org/2022/sqlite-autoconf-${SQLITE_VERSION}.tar.gz && \
+download_untar https://ftp.mozilla.org/pub/nspr/releases/v${NSPR_VERSION}/src/nspr-${NSPR_VERSION}.tar.gz && \
+download_untar https://github.com/fribidi/fribidi/releases/download/v${FRIBIDI_VERSION}/fribidi-${FRIBIDI_VERSION}.tar.xz && \
+download_untar https://download.gnome.org/sources/pango/${PANGO_VERSION%.*}/pango-${PANGO_VERSION}.tar.xz && \
+download_untar https://downloads.sourceforge.net/libmng/libmng-${LIBMNG_VERSION}.tar.xz && \
+download_untar https://ftp.gnu.org/gnu/libtasn1/libtasn1-${LIBTASN1_VERSION}.tar.gz && \
+download_untar https://download.gnome.org/sources/librsvg/${LIBRSVG_VERSION%.*}/librsvg-${LIBRSVG_VERSION}.tar.xz && \
+download_untar https://github.com/HOST-Oman/libraqm/releases/download/v${RAQM_VERSION}/raqm-${RAQM_VERSION}.tar.xz && \
+wget https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v${IMATH_VERSION}.tar.gz -O Imath-${IMATH_VERSION}.tar.gz && \
+tar xavf Imath-${IMATH_VERSION}.tar.gz && \
+wget https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v${OPENEXR_VERSION}.tar.gz -O openexr-${OPENEXR_VERSION}.tar.gz && \
+tar xavf openexr-${OPENEXR_VERSION}.tar.gz && \
+download_untar http://www.mcmurchy.com/ralcgm/ralcgm-${RALCGM_VERSION}.tar.gz && \
+download_untar https://archive.mozilla.org/pub/security/nss/releases/NSS_${NSS_VERSION//./_}_RTM/src/nss-${NSS_VERSION}.tar.gz && \
+download_untar https://gnupg.org/ftp/gcrypt/libassuan/libassuan-${LIBASSUAN_VERSION}.tar.bz2 && \
+download_untar https://gnupg.org/ftp/gcrypt/libksba/libksba-${LIBKSBA_VERSION}.tar.bz2 && \
+download_untar https://gnupg.org/ftp/gcrypt/npth/npth-${NPTH_VERSION}.tar.bz2 && \
+download_untar https://www.gnupg.org/ftp/gcrypt/pinentry/pinentry-${PINENTRY_VERSION}.tar.bz2 && \
+download_untar https://ftp.gnu.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz && \
+download_untar https://ftp.gnu.org/gnu/nettle/nettle-${NETTLE_VERSION}.tar.gz && \
+download_untar https://github.com/libevent/libevent/releases/download/release-${LIBEVENT_VERSION}/libevent-${LIBEVENT_VERSION}.tar.gz && \
+download_untar https://github.com/p11-glue/p11-kit/releases/download/${P11_KIT_VERSION}/p11-kit-${P11_KIT_VERSION}.tar.xz && \
+download_untar https://github.com/lfs-book/make-ca/releases/download/v${MAKE_CA_VERSION}/make-ca-${MAKE_CA_VERSION}.tar.xz && \
+download_untar https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-${GNUTLS_VERSION}.tar.xz && \
+download_untar https://www.nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz && \
+download_untar https://gnupg.org/ftp/gcrypt/gnupg/gnupg-${GNUPG_VERSION}.tar.bz2 && \
+download_untar https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2 && \
+download_untar https://github.com/anholt/libepoxy/archive/refs/tags/${LIBEPOXY_VERSION}.tar.gz && \
+download_untar https://github.com/libarchive/libarchive/releases/download/v${LIBARCHIVE_VERSION}/libarchive-${LIBARCHIVE_VERSION}.tar.xz && \
+echo -e "${Color_Green}Sources downloaded${Color_Off}"
+
+echo -e "${Color_Yellow}Applying patches${Color_Off}"
+
+cd "$SOURCE_ROOT/LibRaw-${LIBRAW_VERSION}" && \
+autoreconf -i -f || exit 1
+
+cd "$SOURCE_ROOT/docbook-xsl-nons-${DOCBOOK_XSL_VERSION}" && \
+patch -Np1 -i "${SCRIPT_ROOT}/patches/docbook-xsl-nons-1.79.2-stack_fix-1.patch" || exit 1
+
+cd "$SOURCE_ROOT/gettext-${GETTEXT_VERSION}" && \
+patch -Np1 -i "${SCRIPT_ROOT}/patches/gettext-0.21-formatstring.patch" || exit 1
+
+cd "$SOURCE_ROOT/libxml2-v${LIBXML2_VERSION}" && ./autogen.sh && make distclean || exit 1
+
+cd "$SOURCE_ROOT/sgml-common-${SGML_COMMON_VERSION}" && \
+patch -Np1 -i "${SCRIPT_ROOT}/patches/sgml-common-0.6.3-manpage-1.patch" && \
+autoreconf -i -f || exit 1
+
+# cd "$SOURCE_ROOT/shared-mime-info-${SHARED_MIME_INFO_VERSION}" && \
+# patch -Np1 -i "$SCRIPT_ROOT/patches/shared-mime-info-2.1-meson_0.60_fix-1.patch" || exit 1
+
+cd "$SOURCE_ROOT/brotli-${BROTLI_VERSION}" && \
+sed -i 's@-R..libdir.@@' scripts/*.pc.in || exit 1
+
+cd "$SOURCE_ROOT/freetype-${FREETYPE_VERSION}" && \
+sed -ri "s:.*(AUX_MODULES.*valid):\1:" modules.cfg && \
+sed -r "s:.*(#.*SUBPIXEL_RENDERING) .*:\1:" \
+    -i include/freetype/config/ftoption.h || exit 1
+
+cd "$SOURCE_ROOT" && wget https://downloads.sourceforge.net/sourceforge/libpng-apng/libpng-1.6.37-apng.patch.gz && \
+gzip -d libpng-1.6.37-apng.patch.gz && \
+cd "$SOURCE_ROOT/libpng-${LIBPNG_VERSION}" && \
+patch -p1 < ../libpng-1.6.37-apng.patch || exit 1
+
+cd "$SOURCE_ROOT/nspr-${NSPR_VERSION}/nspr" && \
+sed -ri '/^RELEASE/s/^/#/' pr/src/misc/Makefile.in && \
+sed -i 's#$(LIBRARY) ##'   config/rules.mk && \
+mv configure.in configure.ac && \
+autoreconf -i -f || exit 1
+
+cd "$SOURCE_ROOT/libmng-${LIBMNG_VERSION}" && \
+make distclean && \
+autoreconf -i -f || exit 1
+
+cd "$SOURCE_ROOT/nss-${NSS_VERSION}/nss" && \
+patch -Np1 < "$SCRIPT_ROOT/patches/nss-3.21-gentoo-fixup-warnings.patch" && \
+patch -Np1 < "$SCRIPT_ROOT/patches/nss-3.68-ld-fix.patch" && \
+patch -Np2 < "$SCRIPT_ROOT/patches/nss-3.75-standalone-1.patch" && \
+patch -Np1 < "$SCRIPT_ROOT/patches/nss-3.79-gcc-13.patch" || exit 1
+
+cd "$SOURCE_ROOT/libevent-${LIBEVENT_VERSION}" && \
+sed -i 's/python/&3/' event_rpcgen.py || exit 1
+
+cd "$SOURCE_ROOT/p11-kit-${P11_KIT_VERSION}" && \
+sed '14,$ d' -i trust/trust-extract-compat &&
+cat >> trust/trust-extract-compat << "EOF"
+# Copy existing anchor modifications to /mingw/etc/ssl/local
+/mingw/libexec/make-ca/copy-trust-modifications
+
+# Update trust stores
+/mingw/bin/make-ca -r
+EOF

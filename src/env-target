@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# shellcheck source=./env-common
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-common"
+
+BUILD_ROOT=$TARGET_BUILD_ROOT
+PREFIX=$MINGW_ROOT
+SYSROOT=$PREFIX
+BINDIR=$PREFIX/bin
+INCLUDEDIR=$PREFIX/include
+LIBDIR=$PREFIX/lib
+BUILD=$(gcc -dumpmachine)
+HOST=x86_64-w64-mingw32
+TARGET=$HOST
+OFLAGS="-march=native -mtune=native"
+CFLAGS=" $OFLAGS $CFLAGS -I$INCLUDEDIR "
+CXXFLAGS=" $OFLAGS $CXXFLAGS -I$INCLUDEDIR "
+CPPFLAGS=" $CPPFLAGS -I$INCLUDEDIR "
+LDFLAGS=" $LDFLAGS -L$LIBDIR "

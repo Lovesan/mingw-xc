@@ -1,0 +1,1243 @@
+#!/bin/bash
+
+# shellcheck source=./env-target
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-target"
+
+# shellcheck source=../versions
+source "$SCRIPT_ROOT/versions"
+
+# shellcheck source=./utils
+source "$SCRIPT_ROOT/src/utils"
+
+remove_la_files() {
+    echo -e "${Color_Green}Removing unneeded .la files${Color_Off}"
+    for ARG in "$@"; do
+        rm -v -f "$LIBDIR/${ARG}.la"
+    done
+}
+
+do_cmake_target() {
+    if [[ $# -lt 1 ]]; then
+        echo_error "Usage: do_cmake_target <srcdir> [...args...]"
+        return 1
+    fi
+    local srcdir=$1
+    shift
+    cmake -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+          -S "$srcdir" \
+          -DCMAKE_C_COMPILER="${BUILD}-gcc" \
+          -DCMAKE_CXX_COMPILER="${BUILD}-g++" \
+          -DCMAKE_C_FLAGS="$CFLAGS" \
+          -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+          -DCMAKE_SYSTEM_NAME=Windows \
+          -DCMAKE_SYSTEM_PROCESSOR=x86_64 \
+          -DCMAKE_C_COMPILER="$TARGET-gcc" \
+          -DCMAKE_CXX_COMPILER="$TARGET-g++" \
+          -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+          -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
+          -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+          -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+          -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+          "$@"
+}
+
+generate_target_cross_file() {
+    sed -e "s|/mingw|${PREFIX}|g" "$SCRIPT_ROOT/misc/cross-file.ini" > cross-file.ini
+}
+
+do_meson_target() {
+    if [[ $# -lt 1 ]]; then
+        echo_error "Usage: do_meson_target <srcdir> [...args...]"
+        return 1
+    fi
+    local srcdir=$1
+    shift
+    generate_target_cross_file && \
+    meson setup --cross-file cross-file.ini \
+                --prefix "${PREFIX}" \
+                --optimization 2 \
+                -Dc_args="$CFLAGS" \
+                -Dcpp_args="$CXXFLAGS" \
+                -Dc_link_args="$LDFLAGS" \
+                -Dcpp_link_args="$LDFLAGS" \
+                --strip \
+                "$@" \
+                "${srcdir}"
+}
+
+build_target_zlib() {
+    mkdir_cd_build zlib && \
+    cp -pr "$SOURCE_ROOT/zlib-${ZLIB_VERSION}"/* ./ && \
+    make -f win32/Makefile.gcc PREFIX="${TARGET}-" \
+                               prefix="$PREFIX" \
+                               INCLUDE_PATH="$INCLUDEDIR" \
+                               LIBRARY_PATH="$LIBDIR" \
+                               BINARY_PATH="$BINDIR" \
+                               SHARED_MODE=0 \
+                               all install && \
+    make -f win32/Makefile.gcc PREFIX="${TARGET}-" \
+                               prefix="$PREFIX" \
+                               INCLUDE_PATH="$INCLUDEDIR" \
+                               LIBRARY_PATH="$LIBDIR" \
+                               BINARY_PATH="$BINDIR" \
+                               SHARED_MODE=1 \
+                               all install
+}
+
+build_target_zstd() {
+    mkdir_cd_build zstd && \
+    do_cmake_target "$SOURCE_ROOT/zstd-${ZSTD_VERSION}/build/cmake" \
+        -DZSTD_BUILD_SHARED=ON \
+        -DZSTD_BUILD_STATIC=ON && \
+    do_cmake_install_strip
+}
+
+build_target_lzo() {
+    mkdir_cd_build lzo && \
+    do_configure_shared "$SOURCE_ROOT/lzo-${LZO_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files liblzo2
+}
+
+build_target_gmp() {
+    mkdir_cd_build gmp && \
+    "${SOURCE_ROOT}/gmp-${GMP_VERSION}/configure" --prefix="$PREFIX" \
+                                                  --build="$BUILD" \
+                                                  --host="$HOST" \
+                                                  --with-sysroot="$SYSROOT" \
+                                                  --disable-rpath \
+                                                  --enable-silent-rules \
+                                                  --enable-shared \
+                                                  --disable-static \
+                                                  --enable-cxx \
+                                                  CFLAGS="$CFLAGS" \
+                                                  CXXFLAGS="$CXXFLAGS" \
+                                                  CPPFLAGS="$CPPFLAGS" \
+                                                  LDFLAGS="$LDFLAGS" \
+                                                  CC_FOR_BUILD="$BUILD-gcc" \
+                                                  CXX_FOR_BUILD="$BUILD-g++" \
+                                                  CPP_FOR_BUILD="$BUILD-cpp" &&
+    do_make_install_strip && \
+    remove_la_files libgmp libgmpxx
+}
+
+build_target_mpfr() {
+    mkdir_cd_build mpfr && \
+    do_configure_shared "$SOURCE_ROOT/mpfr-${MPFR_VERSION}" \
+                        --with-gmp="$PREFIX" && \
+    do_make_install_strip && \
+    remove_la_files libmpfr
+}
+
+build_target_mpc() {
+    mkdir_cd_build mpc && \
+    "$SOURCE_ROOT/mpc-${MPC_VERSION}/configure" --prefix="$PREFIX" \
+                                                --build="$BUILD" \
+                                                --host="$HOST" \
+                                                --enable-shared \
+                                                --disable-static \
+                                                --enable-silent-rules \
+                                                --with-gmp="$PREFIX" \
+                                                --with-mpfr="$PREFIX" \
+                                                CFLAGS="$CFLAGS" \
+                                                CXXFLAGS="$CXXFLAGS" \
+                                                CPPFLAGS="$CPPFLAGS" \
+                                                LDFLAGS="$LDFLAGS" && \
+    do_make_install_strip && \
+    remove_la_files libmpc
+}
+
+build_target_isl() {
+    mkdir_cd_build isl && \
+    do_configure_shared "$SOURCE_ROOT/isl-${ISL_VERSION}" \
+                        --with-gmp-prefix="$PREFIX" && \
+    make -j$NJOBS LDFLAGS="-no-undefined" && make install-strip && \
+    remove_la_files libisl
+}
+
+build_target_mingw_headers() {
+    mkdir_cd_build mingw-w64-headers && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-headers/configure" \
+        --prefix="$PREFIX/$TARGET" \
+        --build="$BUILD" \
+        --host="$HOST" \
+        --target="$TARGET" \
+        --enable-idl \
+        --with-default-msvcrt=${MSVCRT} && \
+    make && make install
+}
+
+build_target_mingw_crt() {
+    mkdir_cd_build mingw-w64-crt && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-crt/configure" \
+        --prefix="$PREFIX/$TARGET" \
+        --build="$BUILD" \
+        --host="$HOST" \
+        --disable-lib32 \
+        --enable-lib64 \
+        --with-default-msvcrt=${MSVCRT} && \
+    make && make install
+}
+
+build_target_winpthreads() {
+    mkdir_cd_build winpthreads && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-libraries/winpthreads/configure" \
+        --prefix="$PREFIX/$TARGET" \
+        --build="$BUILD" \
+        --host="$HOST" \
+        --enable-static \
+        --enable-shared \
+        CFLAGS="$CFLAGS" \
+        CXXFLAGS="$CXXFLAGS" \
+        CPPFLAGS="$CPPFLAGS" \
+        LDFLAGS="$LDFLAGS" && \
+    make && make install && \
+    cp -pf "$PREFIX/$TARGET/bin"/*.dll "$BINDIR"
+}
+
+build_target_gendef() {
+    mkdir_cd_build gendef && \
+    do_configure_shared "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-tools/gendef" && \
+    do_make_install_strip
+}
+
+build_target_binutils() {
+    mkdir_cd_build binutils && \
+    do_configure "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}" \
+                 --disable-nls \
+                 --enable-lto \
+                 --with-gmp="$PREFIX" \
+                 --with-mpfr="$PREFIX" \
+                 --with-mpc="$PREFIX" \
+                 --with-zstd="$PREFIX" \
+                 --with-isl="$PREFIX" && \
+    do_make_install_strip
+}
+
+build_target_gcc() {
+    mkdir_cd_build gcc && \
+    "$SOURCE_ROOT/gcc-${GCC_VERSION}/configure" \
+                --prefix="$PREFIX" \
+                --with-sysroot="$PREFIX" \
+                --host="$HOST" \
+                --target="$TARGET" \
+                --disable-rpath \
+                --enable-silent-rules \
+                --disable-nls \
+                --enable-lto \
+                --enable-languages=c,c++ \
+                --disable-multilib \
+                --enable-static \
+                --enable-shared \
+                --enable-libgomp \
+                --enable-libssp \
+                --enable-threads=posix \
+                --disable-bootstrap \
+                --with-gmp="$PREFIX" \
+                --with-mpfr="$PREFIX" \
+                --with-mpc="$PREFIX" \
+                --with-isl="$PREFIX" \
+                --with-zstd="$PREFIX" \
+                CFLAGS="$CFLAGS" \
+                CXXFLAGS="$CXXFLAGS" \
+                LDFLAGS="$LDFLAGS -lzstd -lpthread" && \
+    do_make_install_strip && \
+    mv "$LIBDIR"/*.dll "$BINDIR/"
+}
+
+build_target_libffi() {
+    mkdir_cd_build libffi && \
+    do_configure_shared "$SOURCE_ROOT/libffi-${LIBFFI_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libffi
+}
+
+build_target_libiconv() {
+    mkdir_cd_build libiconv && \
+    do_configure_shared "$SOURCE_ROOT/libiconv-${LIBICONV_VERSION}" \
+        --enable-relocatable \
+        --enable-threads=posix && \
+    do_make_install_strip && \
+    remove_la_files libiconv libcharset
+}
+
+build_target_libunistring() {
+    mkdir_cd_build libunistring && \
+    do_configure_shared "$SOURCE_ROOT/libunistring-${LIBUNISTRING_VERSION}" \
+        --enable-relocatable \
+        --enable-threads=posix && \
+    do_make_install_strip && \
+    remove_la_files libunistring
+}
+
+build_target_xz() {
+    mkdir_cd_build xz && \
+    do_configure_shared "$SOURCE_ROOT/xz-${XZ_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files liblzma
+}
+
+build_target_bzip2() {
+    mkdir_cd_build bzip2 && \
+    cp -pr "$SOURCE_ROOT/bzip2-${BZIP2_VERSION}"/* ./ && \
+    make -j$NJOBS -f "$SCRIPT_ROOT/misc/Makefile-bzip2-win64" \
+                     TOOL_PREFIX="${TARGET}-" \
+                     PREFIX="${PREFIX}" \
+                     CFLAGS="${CFLAGS}" \
+                     all install
+}
+
+build_target_icu() {
+    mkdir_cd_build icu && \
+    do_configure_shared "${SOURCE_ROOT}/icu-71.1/source" \
+                        --with-cross-build="${HOST_BUILD_ROOT}/icu" && \
+    make -j$NJOBS all install
+}
+
+build_target_libxml2() {
+    mkdir_cd_build libxml2 && \
+    do_cmake_target "$SOURCE_ROOT/libxml2-v${LIBXML2_VERSION}" \
+      -DCMAKE_BUILD_SHARED=ON \
+      -DCMAKE_BUILD_STATIC=OFF \
+      -DLIBXML2_WITH_ICONV=ON \
+      -DLIBXML2_WITH_ICU=ON \
+      -DLIBXML2_WITH_LZMA=ON \
+      -DLIBXML2_WITH_PYTHON=OFF \
+      -DLIBXML2_WITH_ZLIB=ON && \
+    do_cmake_install_strip
+}
+
+build_target_gettext() {
+    mkdir_cd_build gettext && \
+    do_configure_shared "$SOURCE_ROOT/gettext-${GETTEXT_VERSION}" \
+                        --enable-relocatable \
+                        --disable-java \
+                        --disable-csharp \
+                        --enable-nls \
+                        --disable-openmp \
+                        --without-emacs \
+                        --enable-threads=posix \
+                        --with-libiconv-prefix="$PREFIX" \
+                        --with-libunistring-prefix="$PREFIX" \
+                        --with-libxml2-prefix="$PREFIX" && \
+    do_make_install_strip && \
+    remove_la_files libgettextpo libgettextsrc libgettextlib libtextstyle libasprintf && \
+    mkdir -p "${LIBDIR}/pkgconfig" && \
+    sed -e "s|/mingw|${PREFIX}|g" "${SCRIPT_ROOT}/misc/libintl.pc" > "${LIBDIR}/pkgconfig/libintl.pc" && \
+    cp -pf "${LIBDIR}/pkgconfig/libintl.pc" "${LIBDIR}/pkgconfig/intl.pc"
+}
+
+build_target_pcre2() {
+    mkdir_cd_build pcre2 && \
+    do_configure_shared "$SOURCE_ROOT/pcre2-${PCRE2_VERSION}" \
+                        --enable-pcre2-16 \
+                        --enable-pcre2-32 \
+                        --enable-newline-is-any \
+                        --enable-pcre2grep-libz \
+                        --enable-pcre2grep-libbz2 \
+                        --enable-jit && \
+    do_make_install_strip && \
+    remove_la_files libpcre2-8 libpcre2-16 libpcre2-32 libpcre2-posix
+}
+
+build_target_glib() {
+    mkdir_cd_build glib && \
+    do_meson_target "$SOURCE_ROOT/glib-${GLIB_VERSION}" \
+                    -Dforce_posix_threads=true && \
+    do_ninja_make_install
+}
+
+build_target_pkg_config() {
+    mkdir_cd_build pkg-config && \
+    do_configure_shared "$SOURCE_ROOT/pkg-config-${PKG_CONFIG_VERSION}" && \
+    do_make_install_strip
+}
+
+build_target_gzip() {
+    mkdir_cd_build gzip && \
+    do_configure_shared "$SOURCE_ROOT/gzip-${GZIP_VERSION}" \
+                        --enable-threads=posix \
+                        CFLAGS="-D_FORTIFY_SOURCE=0 $CFLAGS" \
+                        CPPFLAGS="-D_FORTIFY_SOURCE=0 $CPPFLAGS" \
+                        CXXFLAGS="-D_FORTIFY_SOURCE=0 $CXXFLAGS" && \
+    do_make_install_strip
+}
+
+build_target_openssl() {
+    mkdir_cd_build openssl && \
+    cp -pr "$SOURCE_ROOT/openssl-${OPENSSL_VERSION}"/* ./ && \
+    ./config --prefix="$PREFIX" \
+             --openssldir="$PREFIX/etc/ssl" \
+             --libdir="$PREFIX/lib" \
+             --cross-compile-prefix="$TARGET-" \
+             shared \
+             threads \
+             zlib-dynamic \
+             mingw64 \
+             CFLAGS="$CFLAGS" \
+             CPPFLAGS="$CPPFLAGS" \
+             LDFLAGS="$LDFLAGS" \
+             CXXFLAGS="$CXXFLAGS" && \
+    do_make_install
+}
+
+build_target_libpng() {
+    mkdir_cd_build libpng && \
+    do_cmake_target "$SOURCE_ROOT/libpng-${LIBPNG_VERSION}" \
+                    -DPNG_SHARED=ON \
+                    -DPNG_STATIC=OFF && \
+    do_cmake_install_strip
+}
+
+build_target_fftw() {
+    mkdir_cd_build fftw && \
+    do_configure_shared "$SOURCE_ROOT/fftw-${FFTW_VERSION}" \
+                        --enable-single \
+                        --enable-sse \
+                        --enable-sse2 \
+                        --enable-avx \
+                        --enable-avx2 \
+                        --enable-avx-128-fma \
+                        --enable-fma \
+                        --disable-mpi \
+                        --disable-fortran \
+                        --enable-threads \
+                        --with-our-malloc \
+                        --with-combined-threads && \
+    do_make_install_strip && \
+    remove_la_files libfftw3f
+}
+
+build_target_libjpeg_turbo() {
+    mkdir_cd_build libjpeg-turbo && \
+    do_cmake_target "$SOURCE_ROOT/libjpeg-turbo-${LIBJPEG_TURBO_VERSION}" \
+                    -DWITH_JAVA=FALSE \
+                    -DENABLE_SHARED=TRUE \
+                    -DENABLE_STATIC=FALSE \
+                    -DWITH_SIMD=TRUE && \
+    do_cmake_install_strip
+}
+
+build_target_jbigkit() {
+    mkdir_cd_build jbigkit && \
+    cp -pr "$SOURCE_ROOT/jbigkit-${JBIG_VERSION}"/* ./ && \
+    cp -p "$SCRIPT_ROOT/misc/libjbig.def" ./ && \
+    cp -p "$SCRIPT_ROOT/misc/libjbig85.def" ./ && \
+    make -f "$SCRIPT_ROOT/misc/Makefile-jbigkit-win64" \
+            TOOL_PREFIX="${TARGET}-" \
+            CFLAGS="$CFLAGS" all install
+}
+
+build_target_tiff() {
+    mkdir_cd_build tiff && \
+    do_configure_shared "$SOURCE_ROOT/tiff-${TIFF_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libtiff libtiffxx
+}
+
+build_target_giflib() {
+    mkdir_cd_build giflib && \
+    cp -pr "$SOURCE_ROOT/giflib-${GIFLIB_VERSION}"/* ./ && \
+    cp -p "$SCRIPT_ROOT/misc/libgif.def" ./ && \
+    make -j$NJOBS PREFIX="$PREFIX" CC="${TARGET}-gcc" AR="${TARGET}-ar" OFLAGS="$CFLAGS" \
+        libgif.a gif2rgb gifbuild giffix giftext giftool gifclrmp && \
+    "${TARGET}-ranlib" libgif.a && \
+    "${TARGET}-gcc" "$OFLAGS" -shared -o libgif-7.dll libgif.def libgif.a && \
+    "${TARGET}-dlltool" -l libgif.dll.a -d libgif.def -D libgif-7.dll && \
+    "${TARGET}-strip" --strip-unneeded libgif-7.dll \
+        gif2rgb.exe gifbuild.exe giffix.exe giftext.exe giftool.exe gifclrmp.exe && \
+    install -vm 644 gif_lib.h "$INCLUDEDIR" && \
+    install -vm 755 libgif-7.dll gif2rgb.exe gifbuild.exe \
+        giffix.exe giftext.exe giftool.exe gifclrmp.exe "$BINDIR" && \
+    install -vm 644 libgif.a libgif.dll.a "$LIBDIR" && \
+    install -d "$PREFIX/share/man/man1" && \
+    for f in ./doc/*.1; do install -vm 644 "$f" "$PREFIX/share/man/man1"; done
+}
+
+build_target_freeglut() {
+    mkdir_cd_build freeglut && \
+    do_cmake_target "$SOURCE_ROOT/freeglut-${FREEGLUT_VERSION}" \
+        -DFREEGLUT_BUILD_SHARED_LIBS=ON \
+        -DFREEGLUT_BUILD_STATIC_LIBS=OFF \
+        -DFREEGLUT_BUILD_DEMOS=OFF \
+        -DFREEGLUT_REPLACE_GLUT=ON && \
+    do_cmake_install_strip
+}
+
+build_target_libwebp() {
+    mkdir_cd_build libwebp && \
+    do_configure_shared "$SOURCE_ROOT/libwebp-${LIBWEBP_VERSION}" \
+                        --enable-libwebpmux \
+                        --enable-libwebpdemux \
+                        --enable-libwebpdecoder \
+                        --enable-libwebpextras \
+                        --enable-swap-16bit-csp \
+                        --enable-sse4.1 \
+                        --enable-sse2 && \
+    do_make_install_strip && \
+    remove_la_files libwebp libwebpdecoder libwebpdemux libwebpmux
+}
+
+build_target_lcms2() {
+    mkdir_cd_build lcms2 && \
+    do_configure_shared "$SOURCE_ROOT/lcms2-${LCMS2_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files liblcms2
+}
+
+build_target_openjpeg() {
+    mkdir_cd_build openjpeg && \
+    do_cmake_target "$SOURCE_ROOT/openjpeg-${OPENJPEG_VERSION}" \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_STATIC_LIBS=OFF \
+        -DBUILD_PKGCONFIG_FILES=ON && \
+    do_cmake_install_strip
+}
+
+build_target_jasper() {
+    mkdir_cd_build jasper && \
+    do_cmake_target "$SOURCE_ROOT/jasper-version-${JASPER_VERSION}" \
+        -DCMAKE_BUILD_SHARED=ON \
+        -DCMAKE_BUILD_STATIC=OFF \
+        -DCMAKE_SKIP_INSTALL_RPATH=YES \
+        -DJAS_STDC_VERSION=201112L \
+        -DJAS_ENABLE_DOC=NO && \
+    do_cmake_install_strip
+}
+
+build_target_libmng() {
+    mkdir_cd_build libmng && \
+    do_cmake_target "$SOURCE_ROOT/libmng-${LIBMNG_VERSION}" \
+                    -DBUILD_STATIC_LIBS=OFF \
+                    -DBUILD_SHARED_LIBS=ON \
+                    -DBUILD_MAN=ON && \
+    do_cmake_install_strip
+}
+
+build_target_libgpg_error() {
+    mkdir_cd_build libgpg-error && \
+    do_configure_shared "$SOURCE_ROOT/libgpg-error-${LIBGPG_ERROR_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libgpg-error
+}
+
+build_target_libgcrypt() {
+    mkdir_cd_build libgcrypt && \
+    do_configure_shared "$SOURCE_ROOT/libgcrypt-${LIBGCRYPT_VERSION}" \
+        --enable-sse41-support \
+        --enable-avx2-support \
+        --enable-avx-support && \
+    do_make_install_strip && \
+    remove_la_files libgcrypt
+}
+
+build_target_libxslt() {
+    mkdir_cd_build libxslt && \
+    do_cmake_target "$SOURCE_ROOT/libxslt-v${LIBXSLT_VERSION}" \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_STATIC_LIBS=OFF \
+        -DLIBXSLT_WITH_TESTS=OFF \
+        -DLIBXSLT_WITH_PYTHON=OFF \
+        -DLIBXSLT_WITH_CRYPTO=ON && \
+    do_cmake_install_strip
+}
+
+build_target_docbook_xml() {
+    mkdir_cd_build docbook-xml && \
+    cp -pr "$SOURCE_ROOT/docbook-xml-4.5"/* ./ && \
+    mkdir -p "$PREFIX/etc/xml" "$PREFIX/share/xml/docbook/xml-dtd-4.5" && \
+    cp -v -af docbook.cat ./*.dtd ent/ ./*.mod "$PREFIX/share/xml/docbook/xml-dtd-4.5" && \
+    if [ ! -e "$PREFIX/etc/xml/docbook-xml.xml" ]; then
+        xmlcatalog --noout --create "$PREFIX/etc/xml/docbook-xml.xml"
+    fi && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//DTD DocBook XML V4.5//EN" \
+        "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//DTD DocBook XML CALS Table Model V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/calstblx.dtd" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//DTD XML Exchange Table Model 19990315//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/soextblx.dtd" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//ELEMENTS DocBook XML Information Pool V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/dbpoolx.mod" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//ELEMENTS DocBook XML Document Hierarchy V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/dbhierx.mod" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//ELEMENTS DocBook XML HTML Tables V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/htmltblx.mod" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//ENTITIES DocBook XML Notations V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/dbnotnx.mod" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//ENTITIES DocBook XML Character Entities V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/dbcentx.mod" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "public" \
+        "-//OASIS//ENTITIES DocBook XML Additional General Entities V4.5//EN" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5/dbgenent.mod" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "rewriteSystem" \
+        "http://www.oasis-open.org/docbook/xml/4.5" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    xmlcatalog --noout --add "rewriteURI" \
+        "http://www.oasis-open.org/docbook/xml/4.5" \
+        "file://$PREFIX/share/xml/docbook/xml-dtd-4.5" \
+        "$PREFIX/etc/xml/docbook-xml.xml" && \
+    if [ ! -e "$PREFIX/etc/xml/catalog" ]; then
+        xmlcatalog --noout --create "$PREFIX/etc/xml/catalog.xml"
+    fi && \
+    xmlcatalog --noout --add "delegatePublic" \
+        "-//OASIS//ENTITIES DocBook XML" \
+        "file://$PREFIX/etc/xml/docbook-xml.xml" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "delegatePublic" \
+        "-//OASIS//DTD DocBook XML" \
+        "file://$PREFIX/etc/xml/docbook-xml.xml" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "delegateSystem" \
+        "http://www.oasis-open.org/docbook/" \
+        "file://$PREFIX/etc/xml/docbook-xml.xml" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "delegateURI" \
+        "http://www.oasis-open.org/docbook/" \
+        "file://$PREFIX/etc/xml/docbook-xml.xml" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    for DTDVERSION in 4.1.2 4.2 4.3 4.4; do
+        xmlcatalog --noout --add "public" \
+            "-//OASIS//DTD DocBook XML V$DTDVERSION//EN" \
+            "http://www.oasis-open.org/docbook/xml/$DTDVERSION/docbookx.dtd" \
+            "$PREFIX/etc/xml/docbook-xml.xml" && \
+        xmlcatalog --noout --add "rewriteSystem" \
+            "http://www.oasis-open.org/docbook/xml/$DTDVERSION" \
+            "file://$PREFIX/share/xml/docbook/xml-dtd-4.5" \
+            "$PREFIX/etc/xml/docbook-xml.xml" && \
+        xmlcatalog --noout --add "rewriteURI" \
+            "http://www.oasis-open.org/docbook/xml/$DTDVERSION" \
+            "file://$PREFIX/share/xml/docbook/xml-dtd-4.5" \
+            "$PREFIX/etc/xml/docbook-xml.xml" && \
+        xmlcatalog --noout --add "delegateSystem" \
+            "http://www.oasis-open.org/docbook/xml/$DTDVERSION/" \
+            "file://$PREFIX/etc/xml/docbook-xml.xml" \
+            "$PREFIX/etc/xml/catalog.xml" && \
+        xmlcatalog --noout --add "delegateURI" \
+            "http://www.oasis-open.org/docbook/xml/$DTDVERSION/" \
+            "file://$PREFIX/etc/xml/docbook-xml.xml" \
+            "$PREFIX/etc/xml/catalog.xml"
+    done
+}
+
+build_target_docbook_xsl() {
+    mkdir_cd_build docbook-xsl && \
+    cp -pr "$SOURCE_ROOT/docbook-xsl-nons-${DOCBOOK_XSL_VERSION}"/* ./ && \
+    install -v -m755 -d "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" && \
+    cp -v -R VERSION assembly common eclipse epub epub3 extensions fo \
+        highlighting html htmlhelp images javahelp lib manpages params \
+        profiling roundtrip slides template tests tools webhelp website \
+        xhtml xhtml-1_1 xhtml5 \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" && \
+    cp -p VERSION "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}/VERSION.xsl" && \
+    install -v -m644 -D README \
+        "$PREFIX/share/doc/docbook-xsl-nons-${DOCBOOK_XSL_VERSION}/README.txt" && \
+    install -v -m644 RELEASE-NOTES* NEWS* \
+        "$PREFIX/share/doc/docbook-xsl-nons-${DOCBOOK_XSL_VERSION}" && \
+    if [ ! -d "$PREFIX/etc/xml" ]; then install -v -m755 -d "$PREFIX/etc/xml"; fi && \
+    if [ ! -f "$PREFIX/etc/xml/catalog.xml" ]; then
+        xmlcatalog --noout --create "$PREFIX/etc/xml/catalog.xml"
+    fi && \
+    xmlcatalog --noout --add "rewriteSystem" \
+        "https://cdn.docbook.org/release/xsl-nons/${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "rewriteURI" \
+        "https://cdn.docbook.org/release/xsl-nons/${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "rewriteSystem" \
+        "https://cdn.docbook.org/release/xsl-nons/current" \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "rewriteURI" \
+        "https://cdn.docbook.org/release/xsl-nons/current" \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "rewriteSystem" \
+        "http://docbook.sourceforge.net/release/xsl/current" \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/etc/xml/catalog.xml" && \
+    xmlcatalog --noout --add "rewriteURI" \
+        "http://docbook.sourceforge.net/release/xsl/current" \
+        "$PREFIX/share/xml/docbook/xsl-stylesheets-nons-${DOCBOOK_XSL_VERSION}" \
+        "$PREFIX/etc/xml/catalog.xml"
+}
+
+build_target_sgml_common() {
+    mkdir_cd_build sgml-common && \
+    cp -prf "$SOURCE_ROOT/sgml-common-${SGML_COMMON_VERSION}"/* ./ && \
+    sed -i -e "s/\\/etc/${PREFIX//\//\\\/}\\/etc/g" ./bin/install-catalog.in && \
+    sed -i -e "s/\\/etc/${PREFIX//\//\\\/}\\/etc/g" ./bin/sgmlwhich && \
+    ./configure --prefix="$PREFIX" \
+                --sysconfdir="$PREFIX/etc" \
+                --build="$BUILD" \
+                --host="$HOST" \
+                --target="$TARGET" && \
+    make docdir="$PREFIX/share/doc" all install && \
+    sed -i -e "s/SGML_BASE_DIR.*/SGML_BASE_DIR=${PREFIX//\//\\\/}\\/share\\/sgml/g" \
+        "$PREFIX/etc/sgml/sgml.conf" && \
+    sed -i -e "s/SGML_CATALOGS_DIR.*/SGML_CATALOGS_DIR=${PREFIX//\//\\\/}\\/etc\\/sgml/g" \
+        "$PREFIX/etc/sgml/sgml.conf" && \
+    "$PREFIX/bin/install-catalog" --add "$PREFIX/etc/sgml/sgml-ent.cat" \
+        "$PREFIX/share/sgml/sgml-iso-entities-8879.1986/catalog" && \
+    "$PREFIX/bin/install-catalog" --add "$PREFIX/etc/sgml/sgml-docbook.cat" \
+        "$PREFIX/etc/sgml/sgml-ent.cat" 
+}
+
+build_target_itstool() {
+    mkdir_cd_build itstool && \
+    PYTHON=/usr/bin/python3 do_configure_shared "${SOURCE_ROOT}/itstool-${ITSTOOL_VERSION}" && \
+    do_make_install_strip
+}
+
+build_target_shared_mime_info() {
+    mkdir_cd_build shared-mime-info && \
+    do_meson_target "$SOURCE_ROOT/shared-mime-info-${SHARED_MIME_INFO_VERSION}" && \
+    do_ninja_make_install && \
+    update-mime-database "$PREFIX/share/mime" && \
+    mkdir -p "$PREFIX/etc/xdg"
+}
+
+build_target_libraw() {
+    mkdir_cd_build libraw && \
+    do_configure_shared "$SOURCE_ROOT/LibRaw-${LIBRAW_VERSION}" \
+        --enable-openmp \
+        --enable-jpeg \
+        --enable-jasper \
+        --enable-zlib \
+        --enable-lcms && \
+    do_make_install_strip && \
+    remove_la_files libraw libraw_r
+}
+
+build_target_xmlto() {
+    mkdir_cd_build xmlto && \
+    cp -pr "$SOURCE_ROOT/xmlto-${XMLTO_VERSION}"/* ./ && \
+    patch -Np1 -i "$SCRIPT_ROOT/patches/xmlto_xmlif.patch" && \
+    do_configure_shared "./" && \
+    do_make_install_strip
+}
+
+build_target_gobject_introspection() {
+    # TODO: requires Python
+    mkdir_cd_build gobject-introspection && \
+    do_meson_target "$SOURCE_ROOT/gobject-introspection-${GOBJECT_INTROSPECTION_VERSION}" && \
+    do_ninja_make_install
+}
+
+build_target_gdk_pixbuf() {
+    mkdir_cd_build gdk-pixbuf && \
+    do_meson_target "$SOURCE_ROOT/gdk-pixbuf-${GDK_PIXBUF_VERSION}" \
+                    -Dbuiltin_loaders=all \
+                    -Dnative_windows_loaders=true \
+                    -Drelocatable=true \
+                    --wrap-mode=nofallback && \
+    do_ninja_make_install
+}
+
+build_target_pixman() {
+    mkdir_cd_build pixman && \
+    do_meson_target "$SOURCE_ROOT/pixman-${PIXMAN_VERSION}" \
+                    -Dsse2=enabled \
+                    -Dssse3=enabled \
+                    -Dgnu-inline-asm=enabled \
+                    -Dopenmp=enabled && \
+    do_ninja_make_install
+}
+
+build_target_liblqr() {
+    mkdir_cd_build lblqr && \
+    do_configure_shared "$SOURCE_ROOT/liblqr-1-${LIBLQR_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files liblqr-1
+}
+
+build_target_brotli() {
+    mkdir_cd_build brotli && \
+    do_cmake_target "$SOURCE_ROOT/brotli-${BROTLI_VERSION}" && \
+    do_cmake_install_strip
+}
+
+build_target_freetype() {
+    mkdir_cd_build freetype && \
+    do_configure_shared "$SOURCE_ROOT/freetype-$FREETYPE_VERSION" \
+                        --enable-freetype-config && \
+    do_make_install && \
+    remove_la_files libfreetype
+}
+
+build_target_graphite2() {
+    mkdir_cd_build graphite2 && \
+    do_cmake_target "$SOURCE_ROOT/graphite2-$GRAPHITE2_VERSION" \
+                    -DBUILD_SHARED_LIBS=ON && \
+    do_cmake_install_strip
+}
+
+build_target_harfbuzz() {
+    mkdir_cd_build harfbuzz && \
+    do_meson_target "$SOURCE_ROOT/harfbuzz-${HARFBUZZ_VERSION}" \
+                    -Dgraphite2=enabled \
+                    -Dgdi=enabled \
+                    -Ddirectwrite=enabled && \
+    do_ninja_make_install
+}
+
+build_target_json_c() {
+    mkdir_cd_build json-c && \
+    do_cmake_target "$SOURCE_ROOT/json-c-${JSON_C_VERSION}" \
+                    -DBUILD_SHARED_LIBS=ON \
+                    -DBUILD_STATIC_LIBS=OFF && \
+    do_cmake_install_strip
+}
+
+build_target_expat() {
+    mkdir_cd_build expat && \
+    do_configure_shared "$SOURCE_ROOT/expat-${EXPAT_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libexpat
+}
+
+build_target_gperf() {
+    mkdir_cd_build gperf && \
+    do_configure_shared "$SOURCE_ROOT/gperf-${GPERF_VERSION}"&& \
+    do_make_install
+}
+
+build_target_fontconfig() {
+    mkdir_cd_build fontconfig && \
+    do_configure_shared "$SOURCE_ROOT/fontconfig-$FONTCONFIG_VERSION" \
+                        --disable-docs \
+                        --sysconfdir="$PREFIX/etc" \
+                        --localstatedir="$PREFIX/var" && \
+    do_make_install_strip && \
+    remove_la_files libfontconfig
+}
+
+build_target_sqlite() {
+    mkdir_cd_build sqlite && \
+    do_configure_shared "$SOURCE_ROOT/sqlite-autoconf-$SQLITE_VERSION" \
+                        --enable-fts3=yes \
+                        --enable-fts4=yes \
+                        --enable-fts5=yes \
+                        CPPFLAGS="$CPPFLAGS -DSQLITE_ENABLE_FTS3=1 \
+                                            -DSQLITE_ENABLE_FTS4=1 \
+                                            -DSQLITE_ENABLE_COLUMN_METADATA=1 \
+                                            -DSQLITE_ENABLE_UNLOCK_NOTIFY=1   \
+                                            -DSQLITE_ENABLE_DBSTAT_VTAB=1     \
+                                            -DSQLITE_SECURE_DELETE=1          \
+                                            -DSQLITE_ENABLE_FTS3_TOKENIZER=1" && \
+    do_make_install_strip && \
+    remove_la_files libsqlite3
+}
+
+build_target_cairo() {
+    mkdir_cd_build cairo && \
+    do_meson_target "$SOURCE_ROOT/cairo-${CAIRO_VERSION}" \
+                    -Dtee=enabled && \
+    do_ninja_make_install
+}
+
+build_target_fribidi() {
+    mkdir_cd_build fribidi && \
+    do_meson_target "$SOURCE_ROOT/fribidi-${FRIBIDI_VERSION}" && \
+    do_ninja_make_install
+}
+
+build_target_pango() {
+    mkdir_cd_build pango && \
+    do_meson_target "$SOURCE_ROOT/pango-${PANGO_VERSION}" && \
+    do_ninja_make_install
+}
+
+build_target_nspr() {
+    local conf
+    mkdir_cd_build nspr && \
+    cp -pr "$SOURCE_ROOT/nspr-${NSPR_VERSION}/nspr"/* ./ && \
+    autoreconf -i -f && \
+    conf=(
+        --prefix="$PREFIX" \
+        --enable-optimize='-O2' \
+        --enable-64bit \
+        --with-pthreads \
+        --with-mozilla \
+        --enable-strip \
+        --enable-win32-target=WIN95 \
+        --build="$BUILD" \
+        --host="$HOST" \
+        --target="$TARGET" \
+        --disable-static \
+        --enable-shared \
+        --disable-debug \
+        HOST_CC=gcc \
+        HOST_CFLAGS='-O2' \
+        HOST_LDFLAGS='-O2' \
+        CC="${TARGET}-gcc" \
+        CXX="${TARGET}-g++" \
+        AR="${TARGET}-ar" \
+        AS="${TARGET}-as" \
+        CFLAGS="$CFLAGS" \
+        CPPFLAGS="$CPPFLAGS" \
+        CXXFLAGS="$CXXFLAGS" \
+        LDFLAGS="$LDFLAGS" \
+        RANLIB="${TARGET}-ranlib" \
+        CROSS_COMPILE=1 
+    ) && \
+    sed -i -e "s|NSINSTALL=nsinstall|NSINSTALL=${BUILD_ROOT}/nspr/config/nsinstall|" './configure' && \
+    LC_ALL="C" \
+    ac_cv_path_AR="${TARGET}-ar" \
+	ac_cv_path_AS="${TARGET}-as" \
+    ac_cv_path_LD="${TARGET}-ld" \
+    ac_cv_path_STRIP="${TARGET}-strip" \
+    ac_cv_path_WINDRES="${TARGET}-windres" \
+    ./configure "${conf[@]}" && \
+    make && make install && \
+    mv "$LIBDIR"/*.dll "$BINDIR" && \
+    mv "$LIBDIR/libnspr4.a" "$LIBDIR/libnspr4.dll.a" && \
+    mv "$LIBDIR/libplds4.a" "$LIBDIR/libplds4.dll.a" && \
+    mv "$LIBDIR/libplc4.a" "$LIBDIR/libplc4.dll.a"
+}
+
+build_target_libtasn1() {
+    mkdir_cd_build libtasn1 && \
+    do_configure_shared "$SOURCE_ROOT/libtasn1-${LIBTASN1_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libtasn1
+}
+
+build_target_librsvg() {
+    mkdir_cd_build librsvg && \
+    mkdir -p "$HOME/.local/bin" && \
+    ln -sf -T "$BINDIR/gdk-pixbuf-query-loaders.exe" "$HOME/.local/bin/gdk-pixbuf-query-loaders" && \
+    do_configure_shared "$SOURCE_ROOT/librsvg-${LIBRSVG_VERSION}" \
+                        --disable-introspection \
+                        RUST_TARGET='x86_64-pc-windows-gnu' && \
+    do_make_install_strip && \
+    rm -f "$HOME/.local/bin/gdk-pixbuf-query-loaders" && \
+    remove_la_files librsvg-2
+}
+
+build_target_raqm() {
+    mkdir_cd_build raqm && \
+    do_meson_target "$SOURCE_ROOT/raqm-${RAQM_VERSION}" && \
+    do_ninja_make_install
+}
+
+build_target_imath() {
+    local imath_mver
+    mkdir_cd_build imath && \
+    do_cmake_target "$SOURCE_ROOT/Imath-${IMATH_VERSION}" \
+                    -DBUILD_SHARED_LIBS=ON \
+                    -DBUILD_STATIC_LIBS=OFF \
+                    -DIMATH_INSTALL_PKG_CONFIG=ON && \
+    do_cmake_install_strip && \
+    cd "$LIBDIR" && \
+    imath_mver=${IMATH_VERSION%.*} && \
+    ln -vsf "libImath-${imath_mver//./_}.dll.a" libImath.dll.a
+}
+
+build_target_openexr() {
+    local openexr_mver
+    mkdir_cd_build openexr && \
+    do_cmake_target "$SOURCE_ROOT/openexr-${OPENEXR_VERSION}" \
+                    -DBUILD_SHARED_LIBS=ON \
+                    -DBUILD_STATIC_LIBS=OFF \
+                    -DOPENEXR_INSTALL_PKG_CONFIG=ON && \
+    do_cmake_install_strip && \
+    cd "$LIBDIR" && \
+    openexr_mver=${OPENEXR_VERSION%.*} && \
+    ln -vsf "libIex-${openexr_mver//./_}.dll.a" "libIex.dll.a" && \
+    ln -vsf "libIlmThread-${openexr_mver//./_}.dll.a" "libIlmThread.dll.a" && \
+    ln -vsf "libOpenEXRCore-${openexr_mver//./_}.dll.a" "libOpenEXRCore.dll.a" && \
+    ln -vsf "libOpenEXR-${openexr_mver//./_}.dll.a" "libOpenEXR.dll.a" && \
+    ln -vsf "libOpenEXRUtil-${openexr_mver//./_}.dll.a" "libOpenEXRUtil.dll.a"
+}
+
+build_target_nss() {
+    local makeargs
+    local xcmakeargs
+    local latest
+    local tools=(
+        certutil.exe
+        modutil.exe
+        pk12util.exe
+        signtool.exe
+        ssltap.exe
+        crlutil.exe
+        cmsutil.exe
+        signver.exe
+        shlibsign.exe
+    )
+    local unsupported_tools=(
+        derdump.exe
+        pp.exe
+        ocspclnt.exe
+        tstclnt.exe
+        selfserv.exe
+        vfyserv.exe
+        atob.exe
+        btoa.exe
+        symkeyutil.exe
+        vfychain.exe
+        strsclnt.exe
+        chktest.exe
+        listsuites.exe
+    )
+    mkdir_cd_build nss/build && \
+    rm -rf ../dist && \
+    cp -pr "$SOURCE_ROOT/nss-${NSS_VERSION}/nss"/* ./ && \
+    pushd coreconf && \
+    sed -i -e 's/\$(MKSHLIB) -o/\$(MKSHLIB) \$(LDFLAGS) -o/g' rules.mk && \
+    echo 'INCLUDES += -I$(DIST)/include/dbm' \
+		>> headers.mk && \
+    popd && \
+    sed -i -e 's:"${2}"/shlibsign:shlibsign:' \
+			cmd/shlibsign/sign.sh && \
+    sed -i -e "/CRYPTOLIB/s:\$(SOFTOKEN_LIB_DIR):../freebl/\$(OBJDIR):" \
+		lib/ssl/config.mk && \
+    sed -i -e "/CRYPTOLIB/s:\$(SOFTOKEN_LIB_DIR):../../lib/freebl/\$(OBJDIR):" \
+		cmd/platlibs.mk && \
+    sed -i -e "s/sectool.lib/libsectool.a/" \
+        cmd/crmftest/Makefile && \
+    makeargs=(
+        OPTIMIZER=
+        USE_64=1
+        USE_SYSTEM_ZLIB=1
+        ZLIB_LIBS=-lz
+        NSS_USE_SYSTEM_SQLITE=1
+        NSS_ENABLE_WERROR=0
+        BUILD_OPT=1
+        NSS_DISABLE_GTESTS=1
+        USE_PTHREADS=1
+        NS_USE_GCC=1
+        CC_IS_GCC=1
+        PREFIX="$PREFIX"
+    ) && \
+    xcmakeargs=(
+        CC="${TARGET}-gcc"
+        CCC="${TARGET}-g++"
+        LD="${TARGET}-ld"
+        AR="${TARGET}-ar rc \$@"
+        AS="${TARGET}-as"
+        ASFLAGS=""
+        RANLIB="${TARGET}-ranlib"
+        RC="${TARGET}-windres -O coff --use-temp-file"
+        XCFLAGS="$CFLAGS -mwindows -Wall -Wshadow"
+        CPPFLAGS="$CPPFLAGS"
+        CXXFLAGS="$CXXFLAGS"
+        LDFLAGS="$LDFLAGS"
+        NSPR_LIB_DIR="$LIBDIR"
+        NSPR_INCLUDE_DIR="$INCLUDEDIR/nspr"
+        OS_ARCH="WIN95"
+        OS_TARGET="WIN95"
+        "${makeargs[@]}"
+    ) && \
+	make -C coreconf \
+        CC="gcc" \
+        CCC="g++" \
+        AR="ar rc \$@" \
+        XCFLAGS="-O2" \
+        RANLIB="ranlib" \
+        "${makeargs[@]}" && \
+    xcmakeargs+=(NSINSTALL="${PWD}/$(find coreconf -type f -name nsinstall)") && \
+    for d in . lib/dbm; do
+        make "${xcmakeargs[@]}" -C $d
+    done && \
+    cd ../dist && \
+    latest=$(cat latest) && \
+    install -v -m755 -d "$LIBDIR" && \
+    install -v -m644 "$latest/lib/"{libcrmf.a,libnssckfw.a,libjar.a} "$LIBDIR" && \
+    install -v -m755 -d "$INCLUDEDIR/nss" && \
+    install -v -m755 -d "$INCLUDEDIR/nss/private" && \
+    install -v -m644 public/nss/* "$INCLUDEDIR/nss" && \
+    install -v -m644 private/nss/* "$INCLUDEDIR/nss/private" && \
+    install -v -m755 -d "$BINDIR" && \
+    for f in "${tools[@]}"; do
+        install -v -m755 "$latest/bin/$f" "$BINDIR"
+    done && \
+    install -v -m755 -d "$PREFIX/libexec/nss/unsupported-tools" && \
+    for f in "${unsupported_tools[@]}"; do
+        install -v -m755 "$latest/bin/$f" "$PREFIX/libexec/nss/unsupported-tools"
+    done && \
+    install -v -m755 "$BUILD_ROOT/nss/build/config/nss-config" "$BINDIR" && \
+    install -v -m644 "$BUILD_ROOT/nss/build/config/nss.pc" "$LIBDIR/pkgconfig" && \
+    cd "$latest/lib" && \
+    for f in *.dll; do
+        gendef "$f" && \
+        "${TARGET}-dlltool" -l "lib${f}.a" -d "${f%.*}.def" --export-all-symbols -D "$f" && \
+        "${TARGET}-strip" --strip-unneeded "$f" && \
+        install -v -m755 "$f" "$BINDIR" && \
+        install -v -m644 "lib${f}.a" "$LIBDIR"
+    done && \
+    for f in freebl3 nssdbm3 softokn3; do
+        shlibsign -i "${f}.dll" -o "${f}.chk" && \
+        install -v -m644 "${f}.chk" "$BINDIR"
+    done && \
+    cd "$BUILD_ROOT/nss/build" && \
+    install -v -m644 doc/nroff/*.1 "$PREFIX/share/man/man1"
+}
+
+build_target_libassuan() {
+    mkdir_cd_build libassuan && \
+    do_configure_shared "$SOURCE_ROOT/libassuan-${LIBASSUAN_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libassuan
+}
+
+build_target_libksba() {
+    mkdir_cd_build libksba && \
+    do_configure_shared "$SOURCE_ROOT/libksba-${LIBKSBA_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libksba
+}
+
+build_target_npth() {
+    mkdir_cd_build npth && \
+    do_configure_shared "$SOURCE_ROOT/npth-${NPTH_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libnpth
+}
+
+build_target_pinentry() {
+    mkdir_cd_build pinentry && \
+    do_configure_shared "$SOURCE_ROOT/pinentry-${PINENTRY_VERSION}"  && \
+    do_make_install_strip
+}
+
+build_target_libidn2() {
+    mkdir_cd_build libidn2 && \
+    do_configure_shared "$SOURCE_ROOT/libidn2-${LIBIDN2_VERSION}" \
+                        PKG_CONFIG="${TARGET}-pkg-config" && \
+    do_make_install_strip && \
+    remove_la_files libidn2
+}
+
+build_target_nettle() {
+    mkdir_cd_build nettle && \
+    do_configure_shared "$SOURCE_ROOT/nettle-${NETTLE_VERSION}" \
+                        --enable-x86-aesni \
+                        --enable-x86-sha-ni \
+                         --enable-x86-pclmul && \
+    do_make_install
+}
+
+build_target_libevent() {
+    mkdir_cd_build libevent && \
+    do_configure_shared "$SOURCE_ROOT/libevent-${LIBEVENT_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libevent libevent_core libevent_extra libevent_openssl
+}
+
+build_target_make_ca() {
+    mkdir_cd_build make_ca && \
+    cp -pr "$SOURCE_ROOT/make-ca-${MAKE_CA_VERSION}"/* ./ && \
+    sed -i -e "s|/etc/make-ca.conf|$PREFIX/etc/make-ca.conf|g" make-ca && \
+    sed -i -e "s|/etc/make-ca.conf|$PREFIX/etc/make-ca.conf|g" copy-trust-modifications && \
+    make SBINDIR="$BINDIR" \
+         MANDIR="$PREFIX/share/man" \
+         ETCDIR="$PREFIX/etc" \
+         LIBEXECDIR="$PREFIX/libexec/make-ca" install && \
+    sed -e "s|/mingw|$PREFIX|g" "$SCRIPT_ROOT/misc/make-ca.conf" > "$PREFIX/etc/make-ca.conf" && \
+    install -vdm755 "$PREFIX/etc/ssl/local"
+}
+
+build_target_p11_kit() {
+    mkdir_cd_build p11-kit && \
+    do_meson_target "$SOURCE_ROOT/p11-kit-${P11_KIT_VERSION}" \
+                    -Dsysconfdir="$PREFIX/etc" \
+                    -Dtrust_paths="$PREFIX/etc/pki/anchors" \
+                    -Dtrust_module=enabled \
+                    -Dman=true \
+                    -Dlibffi=enabled \
+                    -Dsystemd=disabled \
+                    -Dc_link_args="$LDFLAGS -lintl" \
+                    -Dcpp_link_args="$LDFLAGS -lintl" && \
+    do_ninja_make_install && \
+    cd "$BINDIR" && \
+    ln -sfv "../libexec/p11-kit/trust-extract-compat" "update-ca-certificates" && \
+    for f in "$PREFIX/share/p11-kit/modules"/*.module; do
+        sed -i -e 's/module:\(.*\).so/module:\1.dll/g' "$f"
+    done
+}
+
+build_target_unbound() {
+    mkdir_cd_build unbound && \
+    do_configure_shared "$SOURCE_ROOT/unbound-${UNBOUND_VERSION}" \
+                        --sbindir="$BINDIR" \
+                        --sysconfdir="$PREFIX/etc" \
+                        --with-conf-file="$PREFIX/etc/unbound.conf" \
+                        --with-pidfile="$PREFIX/run/unbound.pid" \
+                        --with-run-dir=path="$PREFIX/run/unbound" \
+                        --with-pthreads \
+                        PKG_CONFIG="${TARGET}-pkg-config" && \
+    do_make_install && \
+    remove_la_files libunbound
+}
+
+build_target_gnutls() {
+    mkdir_cd_build gnutls && \
+    GNUTLS_SYSTEM_PRIORITY_FILE="$PREFIX/etc/gnutls/config" \
+    do_configure_shared "$SOURCE_ROOT/gnutls-${GNUTLS_VERSION}" \
+                        --sysconfdir="$PREFIX/etc" \
+                        --with-default-trust-store-pkcs11="pkcs11:" \
+                        --disable-guile \
+                        --enable-ssl3-support \
+                        --enable-threads=posix \
+                        --disable-libdane \
+                        --disable-tests \
+                        --disable-doc \
+                        --enable-manpages && \
+    GNUTLS_SYSTEM_PRIORITY_FILE="$PREFIX/etc/gnutls/config" \
+    make -j$NJOBS && \
+    GNUTLS_SYSTEM_PRIORITY_FILE="$PREFIX/etc/gnutls/config" \
+    make install-strip && \
+    remove_la_files libgnutls libgnutlsxx
+}
+
+build_target_libusb() {
+    mkdir_cd_build libusb && \
+    do_configure_shared "$SOURCE_ROOT/libusb-${LIBUSB_VERSION}" && \
+    make && make install-strip && \
+    remove_la_files libusb-1.0 && \
+    cd "$LIBDIR" && \
+    ln -vsf libusb-1.0.dll.a libusb.dll.a
+}
+
+build_target_gnupg() {
+    mkdir_cd_build gnupg && \
+    do_configure_shared "$SOURCE_ROOT/gnupg-${GNUPG_VERSION}" \
+                        --localstatedir="$PREFIX/var" \
+                        --sysconfdir="$PREFIX/etc" \
+                        PKG_CONFIG="${TARGET}-pkg-config" && \
+    do_make_install_strip
+}
+
+build_target_libepoxy() {
+    mkdir_cd_build libepoxy && \
+    do_meson_target "$SOURCE_ROOT/libepoxy-${LIBEPOXY_VERSION}" &&
+    do_ninja_make_install
+}
+
+build_target_libarchive() {
+    mkdir_cd_build libarchive && \
+    do_configure_shared "$SOURCE_ROOT/libarchive-${LIBARCHIVE_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libarchive
+}

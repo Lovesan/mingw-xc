@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# shellcheck source=./env-xc
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-xc"
+
+# shellcheck source=../versions
+source "$SCRIPT_ROOT/versions"
+
+# shellcheck source=./utils
+source "$SCRIPT_ROOT/src/utils"
+
+# shellcheck source=./build-host-common
+source "$SCRIPT_ROOT/src/build-host-common"
+
+fixup_xc_symlink() {
+    rm -f "$PREFIX/mingw" && ln -s "$PREFIX/$TARGET" "$PREFIX/mingw"
+}
+
+build_xc_binutils() {
+    mkdir_cd_build binutils && \
+    do_configure "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}" \
+                 --disable-nls \
+                 --enable-lto \
+                 --with-gmp="$PREFIX" \
+                 --with-mpfr="$PREFIX" \
+                 --with-mpc="$PREFIX" \
+                 --with-zstd="$PREFIX" \
+                 --with-isl="$PREFIX" && \
+    do_make_install_strip && \
+    fixup_xc_symlink
+}
+
+build_xc_mingw_headers() {
+    mkdir_cd_build mingw-w64-headers && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-headers/configure" \
+        --prefix="$PREFIX/$TARGET" \
+        --host=$TARGET \
+        --target=$TARGET \
+        --enable-idl \
+        --with-default-msvcrt=${MSVCRT} && \
+    make && make install
+}
+
+build_xc_gcc_stage1() {
+    mkdir_cd_build gcc && \
+    "$SOURCE_ROOT/gcc-${GCC_VERSION}/configure" \
+                --prefix="$PREFIX" \
+                --with-sysroot="$PREFIX" \
+                --build="$BUILD" \
+                --host="$HOST" \
+                --target="$TARGET" \
+                --disable-rpath \
+                --enable-silent-rules \
+                --disable-nls \
+                --enable-lto \
+                --enable-languages=c,c++ \
+                --disable-multilib \
+                --enable-static \
+                --enable-shared \
+                --enable-libgomp \
+                --enable-libssp \
+                --disable-bootstrap \
+                --enable-threads=posix \
+                --with-gmp="$PREFIX" \
+                --with-mpfr="$PREFIX" \
+                --with-mpc="$PREFIX" \
+                --with-isl="$PREFIX" \
+                --with-zstd="$PREFIX" \
+                CFLAGS="$CFLAGS" \
+                CXXFLAGS="$CXXFLAGS" \
+                CPPFLAGS="$CPPFLAGS" \
+                LDFLAGS=" $LDFLAGS -lzstd -pthread " && \
+    make -j$NJOBS all-gcc && make install-gcc
+}
+
+build_xc_mingw_crt() {
+    mkdir_cd_build mingw-w64-crt && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-crt/configure" \
+        --prefix="$PREFIX/$TARGET" \
+        --host=$TARGET \
+        --disable-lib32 \
+        --enable-lib64 \
+        --with-default-msvcrt=${MSVCRT} && \
+    make && make install
+}
+
+build_xc_winpthreads() {
+    mkdir_cd_build winpthreads && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-libraries/winpthreads/configure" \
+        --prefix="$PREFIX/$TARGET" \
+        --host=$TARGET \
+        --enable-static \
+        --enable-shared && \
+    make && make install
+}
+
+build_xc_gcc() {
+    build_xc_mingw_headers && \
+    build_xc_gcc_stage1 && \
+    build_xc_mingw_crt && \
+    build_xc_winpthreads && \
+    cd "$BUILD_ROOT/gcc" && \
+    do_make_install_strip
+}
+
+build_xc_gendef() {
+    mkdir_cd_build gendef && \
+    "$SOURCE_ROOT/mingw-w64-v${MINGW_VERSION}/mingw-w64-tools/gendef/configure" \
+        --prefix="$PREFIX" \
+        --build="$BUILD" \
+        --host="$HOST" \
+        --target="$TARGET" \
+        --enable-static \
+        --disable-shared &&
+    make && make install
+}
+
+build_xc_pkg_config() {
+    cat > "$BINDIR/$TARGET-pkg-config" << EOF
+#!/bin/bash
+
+export PKG_CONFIG_PATH='$MINGW_ROOT/lib/pkgconfig'
+export PKG_CONFIG_LIBDIR=\$PKG_CONFIG_PATH
+export PKG_CONFIG_SYSROOT_DIR='$MINGW_ROOT'
+pkg-config "\$@"
+EOF
+    chmod 755 "$BINDIR/$TARGET-pkg-config"
+}

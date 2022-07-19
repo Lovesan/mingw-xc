@@ -1,0 +1,61 @@
+diff --git a/xmlif/xmlif.c b/xmlif/xmlif.c
+index 50aa1bc..946be35 100644
+--- a/xmlif/xmlif.c
++++ b/xmlif/xmlif.c
+@@ -1305,7 +1305,7 @@ static void process_else()
+ #line 1306 "xmlif/xmlif.c"
+ 
+ #define INITIAL 0
+-#define attrib 1
++#define attrib_state 1
+ #define val 2
+ 
+ #ifndef YY_NO_UNISTD_H
+@@ -1554,25 +1554,25 @@ case 1:
+ /* rule 1 can match eol */
+ YY_RULE_SETUP
+ #line 208 "xmlif/xmlif.l"
+-{BEGIN(attrib); ifsense = FALSE; push_level();}
++{BEGIN(attrib_state); ifsense = FALSE; push_level();}
+ 	YY_BREAK
+ case 2:
+ /* rule 2 can match eol */
+ YY_RULE_SETUP
+ #line 209 "xmlif/xmlif.l"
+-{BEGIN(attrib); ifsense = TRUE;  push_level();}
++{BEGIN(attrib_state); ifsense = TRUE;  push_level();}
+ 	YY_BREAK
+ case 3:
+ /* rule 3 can match eol */
+ YY_RULE_SETUP
+ #line 210 "xmlif/xmlif.l"
+-{BEGIN(attrib); ifsense = FALSE;}
++{BEGIN(attrib_state); ifsense = FALSE;}
+ 	YY_BREAK
+ case 4:
+ /* rule 4 can match eol */
+ YY_RULE_SETUP
+ #line 211 "xmlif/xmlif.l"
+-{BEGIN(attrib); ifsense = TRUE;}
++{BEGIN(attrib_state); ifsense = TRUE;}
+ 	YY_BREAK
+ case 5:
+ /* rule 5 can match eol */
+@@ -1608,7 +1608,7 @@ YY_RULE_SETUP
+ {
+ 				    yytext[strlen(yytext)-1]='\0';
+ 				    process_value(yytext+1);
+-				    BEGIN(attrib);
++				    BEGIN(attrib_state);
+ 				}
+ 	YY_BREAK
+ case 11:
+@@ -1635,7 +1635,7 @@ ECHO;
+ 	YY_BREAK
+ #line 1637 "xmlif/xmlif.c"
+ case YY_STATE_EOF(INITIAL):
+-case YY_STATE_EOF(attrib):
++case YY_STATE_EOF(attrib_state):
+ case YY_STATE_EOF(val):
+ 	yyterminate();
+ 
