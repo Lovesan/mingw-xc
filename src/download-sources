@@ -99,6 +99,14 @@ download_untar https://gnupg.org/ftp/gcrypt/gnupg/gnupg-${GNUPG_VERSION}.tar.bz2
 download_untar https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2 && \
 download_untar https://github.com/anholt/libepoxy/archive/refs/tags/${LIBEPOXY_VERSION}.tar.gz && \
 download_untar https://github.com/libarchive/libarchive/releases/download/v${LIBARCHIVE_VERSION}/libarchive-${LIBARCHIVE_VERSION}.tar.xz && \
+download_untar https://c-ares.haxx.se/download/c-ares-${C_ARES_VERSION}.tar.gz && \
+download_untar https://github.com/rockdaboot/libpsl/releases/download/${LIBPSL_VERSION}/libpsl-${LIBPSL_VERSION}.tar.gz && \
+download_untar https://www.libssh2.org/download/libssh2-${LIBSSH2_VERSION}.tar.gz && \
+download_untar https://github.com/akheron/jansson/releases/download/v${JANSSON_VERSION}/jansson-${JANSSON_VERSION}.tar.bz2 && \
+download_untar https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz && \
+download_untar https://launchpad.net/libmetalink/trunk/libmetalink-${LIBMETALINK_VERSION}/+download/libmetalink-${LIBMETALINK_VERSION}.tar.xz && \
+git clone https://git.ffmpeg.org/rtmpdump && \
+download_untar https://curl.se/download/curl-${CURL_VERSION}.tar.xz && \
 echo -e "${Color_Green}Sources downloaded${Color_Off}"
 
 echo -e "${Color_Yellow}Applying patches${Color_Off}"

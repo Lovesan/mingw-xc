@@ -1241,3 +1241,76 @@ build_target_libarchive() {
     do_make_install_strip && \
     remove_la_files libarchive
 }
+
+build_target_c_ares() {
+    mkdir_cd_build c-ares && \
+    do_cmake_target "$SOURCE_ROOT/c-ares-${C_ARES_VERSION}" \
+                    -DCARES_SHARED=ON \
+                    -DCARES_STATIC=OFF && \
+    do_cmake_install_strip
+}
+
+build_target_libpsl() {
+    mkdir_cd_build libpsl && \
+    do_configure_shared "$SOURCE_ROOT/libpsl-${LIBPSL_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libpsl
+}
+
+build_target_libssh2() {
+    mkdir_cd_build libssh2 && \
+    do_configure_shared "$SOURCE_ROOT/libssh2-${LIBSSH2_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libssh2
+}
+
+build_target_jansson() {
+    mkdir_cd_build jansson && \
+    do_configure_shared "$SOURCE_ROOT/jansson-${JANSSON_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libjansson
+}
+
+build_target_nghttp2() {
+    mkdir_cd_build nghttp2 && \
+    do_configure_shared "$SOURCE_ROOT/nghttp2-${NGHTTP2_VERSION}" \
+        --enable-lib-only && \
+    do_make_install_strip && \
+    remove_la_files libnghttp2
+}
+
+build_target_libmetalink() {
+    mkdir_cd_build libmetalink && \
+    do_configure_shared "$SOURCE_ROOT/libmetalink-${LIBMETALINK_VERSION}" && \
+    do_make_install_strip && \
+    remove_la_files libmetalink
+}
+
+build_target_rtmpdump() {
+    mkdir_cd_build rtmpdump && \
+    cp -pr "$SOURCE_ROOT/rtmpdump"/* ./ && \
+    make SYS=mingw \
+         CROSS_COMPILE="${TARGET}-" \
+         prefix="$PREFIX" \
+         THREADLIB_mingw="-lpthread" \
+         CRYPTO=GNUTLS \
+         XDEF=-DNO_SSL \
+         OPT="" \
+         INC="" \
+         XCFLAGS="$CFLAGS" \
+         XLDFLAGS="$LDFLAGS" \
+         SBINDIR="$PREFIX/bin" \
+         all install
+}
+
+build_target_curl() {
+    mkdir_cd_build curl && \
+    do_configure_shared "$SOURCE_ROOT/curl-${CURL_VERSION}" \
+        --with-openssl="$PREFIX" \
+        --enable-threaded-resolver \
+        --enable-pthreads \
+        --with-ca-path="$PREFIX/etc/ssl/certs" \
+        --with-libssh2 && \
+    do_make_install_strip && \
+    remove_la_files libcurl
+}

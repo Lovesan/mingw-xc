@@ -108,6 +108,12 @@ do_configure() {
     shift
     echo -e "${Color_Green}Configuring $(basename "$srcdir")${Color_Off}"
     "${srcdir}/configure" --prefix="$PREFIX" \
+                          --includedir="$PREFIX/include" \
+                          --libdir="$PREFIX/lib" \
+                          --sbindir="$PREFIX/bin" \
+                          --sysconfdir="$PREFIX/etc" \
+                          --localstatedir="$PREFIX/var" \
+                          --runstatedir="$PREFIX/run" \
                           --build="$BUILD" \
                           --host="$HOST" \
                           --target="$TARGET" \
