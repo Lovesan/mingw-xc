@@ -18,14 +18,22 @@ fixup_xc_symlink() {
 
 build_xc_binutils() {
     mkdir_cd_build binutils && \
-    do_configure "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}" \
-                 --disable-nls \
-                 --enable-lto \
-                 --with-gmp="$PREFIX" \
-                 --with-mpfr="$PREFIX" \
-                 --with-mpc="$PREFIX" \
-                 --with-zstd="$PREFIX" \
-                 --with-isl="$PREFIX" && \
+    "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}/configure" \
+                --prefix="$PREFIX" \
+                --build="$BUILD" \
+                --host="$HOST" \
+                --target="$TARGET" \
+                --disable-nls \
+                --enable-lto \
+                --with-gmp="$PREFIX" \
+                --with-mpfr="$PREFIX" \
+                --with-mpc="$PREFIX" \
+                --with-zstd="$PREFIX" \
+                --with-isl="$PREFIX" \
+                --disable-rpath \
+                CFLAGS="$OFLAGS" \
+                CXXFLAGS="$OFLAGS" \
+                LDFLAGS="$LDFLAGS"&& \
     do_make_install_strip && \
     fixup_xc_symlink
 }
@@ -37,7 +45,7 @@ build_xc_mingw_headers() {
         --host=$TARGET \
         --target=$TARGET \
         --enable-idl \
-        --with-default-msvcrt=${MSVCRT} && \
+        --with-default-msvcrt="${MSVCRT}" && \
     make && make install
 }
 
@@ -66,10 +74,9 @@ build_xc_gcc_stage1() {
                 --with-mpc="$PREFIX" \
                 --with-isl="$PREFIX" \
                 --with-zstd="$PREFIX" \
-                CFLAGS="$CFLAGS" \
-                CXXFLAGS="$CXXFLAGS" \
-                CPPFLAGS="$CPPFLAGS" \
-                LDFLAGS=" $LDFLAGS -lzstd -pthread " && \
+                CFLAGS="$OFLAGS" \
+                CXXFLAGS="$OFLAGS" \
+                LDFLAGS="$LDFLAGS -lzstd -pthread" && \
     make -j$NJOBS all-gcc && make install-gcc
 }
 
@@ -80,7 +87,7 @@ build_xc_mingw_crt() {
         --host=$TARGET \
         --disable-lib32 \
         --enable-lib64 \
-        --with-default-msvcrt=${MSVCRT} && \
+        --with-default-msvcrt="${MSVCRT}" && \
     make && make install
 }
 

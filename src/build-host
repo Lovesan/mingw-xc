@@ -14,14 +14,25 @@ source "$SCRIPT_ROOT/src/build-host-common"
 
 build_host_binutils() {
     mkdir_cd_build binutils && \
-    do_configure "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}" \
-                 --disable-nls \
-                 --enable-lto \
-                 --with-gmp="$PREFIX" \
-                 --with-mpfr="$PREFIX" \
-                 --with-mpc="$PREFIX" \
-                 --with-zstd="$PREFIX" \
-                 --with-isl="$PREFIX" && \
+    "$SOURCE_ROOT/binutils-${BINUTILS_VERSION}/configure" \
+                --prefix="$PREFIX" \
+                --build="$BUILD" \
+                --host="$HOST" \
+                --target="$TARGET" \
+                --disable-nls \
+                --enable-lto \
+                --enable-static \
+                --disable-shared \
+                --with-gmp="$PREFIX" \
+                --with-mpfr="$PREFIX" \
+                --with-mpc="$PREFIX" \
+                --with-zstd="$PREFIX" \
+                --with-isl="$PREFIX" \
+                --disable-rpath \
+                CFLAGS="$OFLAGS" \
+                CXXFLAGS="$OFLAGS" \
+                CPPFLAGS="" \
+                LDFLAGS="$LDFLAGS"&& \
     do_make_install_strip
 }
 
@@ -41,18 +52,18 @@ build_host_gcc() {
                 --enable-version-specific-runtime-libs \
                 --disable-multilib \
                 --enable-static \
-                --enable-shared \
+                --disable-shared \
                 --enable-libgomp \
                 --enable-libssp \
-                --disable-bootstrap \
+                --enable-bootstrap \
                 --with-gmp="$PREFIX" \
                 --with-mpfr="$PREFIX" \
                 --with-mpc="$PREFIX" \
                 --with-isl="$PREFIX" \
                 --with-zstd="$PREFIX" \
-                CFLAGS="$CFLAGS" \
-                CXXFLAGS="$CXXFLAGS" \
-                CPPFLAGS="$CPPFLAGS" \
+                CFLAGS="$OFLAGS" \
+                CXXFLAGS="$OFLAGS" \
+                CPPFLAGS="" \
                 LDFLAGS="$LDFLAGS -lzstd -lpthread" && \
     do_make_install_strip
 }

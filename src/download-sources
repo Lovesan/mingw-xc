@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # shellcheck source=./env-common
-source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-shared"
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/env-common"
 
 # shellcheck source=../versions
 source "$SCRIPT_ROOT/versions"
@@ -21,8 +21,9 @@ download_untar https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz && \
 wget https://downloads.sourceforge.net/project/mingw-w64/mingw-w64/mingw-w64-release/mingw-w64-v${MINGW_VERSION}.zip && \
 unzip -o mingw-w64-v${MINGW_VERSION}.zip && \
 download_untar https://github.com/libffi/libffi/releases/download/v${LIBFFI_VERSION}/libffi-${LIBFFI_VERSION}.tar.gz && \
-download_untar https://github.com/facebook/zstd/archive/refs/tags/v${ZSTD_VERSION}.tar.gz -O zstd-${ZSTD_VERSION}.tar.gz && \
-download_untar https://download.gnome.org/sources/glib/${GLIB_VERSION_DIR}/glib-${GLIB_VERSION}.tar.xz && \
+wget https://github.com/facebook/zstd/archive/refs/tags/v${ZSTD_VERSION}.tar.gz -O zstd-${ZSTD_VERSION}.tar.gz && \
+tar xavf zstd-${ZSTD_VERSION}.tar.gz && \
+download_untar https://download.gnome.org/sources/glib/${GLIB_VERSION%.*}/glib-${GLIB_VERSION}.tar.xz && \
 download_untar https://ftp.gnu.org/pub/gnu/libiconv/libiconv-${LIBICONV_VERSION}.tar.gz && \
 download_untar https://pkgconfig.freedesktop.org/releases/pkg-config-${PKG_CONFIG_VERSION}.tar.gz && \
 download_untar https://ftp.gnu.org/gnu/gettext/gettext-${GETTEXT_VERSION}.tar.xz && \

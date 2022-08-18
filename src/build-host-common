@@ -27,7 +27,6 @@ build_host_zstd() {
 build_host_gmp() {
     mkdir_cd_build gmp && \
     "${SOURCE_ROOT}/gmp-${GMP_VERSION}/configure" --prefix="$PREFIX" \
-                                                  --with-sysroot="$SYSROOT" \
                                                   --disable-rpath \
                                                   --enable-static \
                                                   --disable-shared \
@@ -43,16 +42,14 @@ build_host_gmp() {
 build_host_mpfr() {
     mkdir_cd_build mpfr && \
     do_configure_static "$SOURCE_ROOT/mpfr-${MPFR_VERSION}" \
-                        --with-gmp="$PREFIX" && \
+                        --with-gmp="$PREFIX" \
+                        --enable-silent-rules && \
     do_make_install_strip
 }
 
 build_host_mpc() {
     mkdir_cd_build mpc && \
     "$SOURCE_ROOT/mpc-${MPC_VERSION}/configure" --prefix="$PREFIX" \
-                                                --build="$BUILD" \
-                                                --host="$HOST" \
-                                                --target="$TARGET" \
                                                 --enable-static \
                                                 --disable-shared \
                                                 --enable-silent-rules \
@@ -80,9 +77,9 @@ build_host_icu() {
 }
 
 uninstall_host_static_libs() {
-    cd "$BUILD_ROOT/zstd" && do_cmake_uninstall && \
-    cd "$BUILD_ROOT/gmp" && do_make_uninstall && \
-    cd "$BUILD_ROOT/mpfr" && do_make_uninstall && \
-    cd "$BUILD_ROOT/mpc" && do_make_uninstall && \
     cd "$BUILD_ROOT/isl" && do_make_uninstall
+    cd "$BUILD_ROOT/zstd" && do_cmake_uninstall
+    cd "$BUILD_ROOT/gmp" && do_make_uninstall
+    cd "$BUILD_ROOT/mpfr" && do_make_uninstall
+    cd "$BUILD_ROOT/mpc" && do_make_uninstall
 }
